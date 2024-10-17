@@ -1,11 +1,16 @@
-import { WebPlugin } from '@capacitor/core';
-import { Observable } from 'rxjs';
+import {  WebPlugin } from '@capacitor/core';
+import { CustomHttpPlugin } from './definitions';
 
-import type { CustomHttpPlugin } from './definitions';
+export class CustomHttpPluginWeb extends WebPlugin implements CustomHttpPlugin {
 
-export class CustomHttpWeb extends WebPlugin implements CustomHttpPlugin {
-  progressObservable!: Observable<any>;
-  post<T>({}): Promise<T> {
-    throw new Error('Method not implemented for web.');
+  constructor() {
+    super({
+      name: 'CustomHttpPlugin',
+      platforms: ['web']
+    });
+  }
+
+  post<T>(args: { url: string; body: any; options: {}; }): Promise<T> {
+    throw new Error(`No web implementation ${args}`);
   }
 }

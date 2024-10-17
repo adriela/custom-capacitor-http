@@ -7,6 +7,7 @@ import com.getcapacitor.JSObject;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.plugin.util.HttpRequestHandler;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -32,18 +33,26 @@ public class CustomHttpHandler extends HttpRequestHandler {
      * @param customHttpPlugin Current Custom Plugin instance
      * @param call             The Capacitor PluginCall that contains the options need for an Http request
      */
-    public static void request(CustomHttpPlugin customHttpPlugin, PluginCall call) throws JSONException {
+    public static void request(CustomHttpPlugin customHttpPlugin, PluginCall call) {
         String urlString = call.getString("url", "");
-        JSArray filesArray = call.getArray("files");
-        JSObject data = call.getObject("data");
-        // Create a ProgressRequestBody from the raw data
-        assert filesArray != null;
-        assert data != null;
+        JSObject data = call.getObject("body");
+        String filesJson = data.getString("files");
+        JSONArray filesArray = null;
+        try {
+            filesArray = new JSONArray(filesJson);
+        } catch (JSONException e) {
+            CustomHttpHandler.rejectCallWithData(call, e.getLocalizedMessage());
+        }
         // Create a MultipartBody builder
         MultipartBody.Builder multipartBuilder = new MultipartBody.Builder()
                 .setType(MultipartBody.FORM);
         for (int i = 0; i < filesArray.length(); i++) {
-            JSObject file = JSObject.fromJSONObject(filesArray.getJSONObject(i));
+            JSObject file = null;
+            try {
+                file = JSObject.fromJSONObject(filesArray.getJSONObject(i));
+            } catch (JSONException e) {
+                call.reject("json_error", e.getLocalizedMessage());
+            }
             String fileName = file.getString("fileName");
             String base64Data = file.getString("base64Data");
             if (base64Data != null) {; // Get only the base64 part
@@ -60,8 +69,10 @@ public class CustomHttpHandler extends HttpRequestHandler {
         // Add additional data to the request
         for (Iterator<String> it = data.keys(); it.hasNext(); ) {
             String key = it.next();
-            String value = data.getString(key);
-            multipartBuilder.addFormDataPart(key, value);
+            if(!Objects.equals(key, "files")) {
+                String value = data.getString(key);
+                multipartBuilder.addFormDataPart(key, value);
+            }
         }
 
         // Build the final MultipartBody
@@ -71,7 +82,8 @@ public class CustomHttpHandler extends HttpRequestHandler {
             Log.i("Upload progress: ", progress + "%");
             JSObject result = new JSObject();
             result.put("type",1);
-            result.put("progress",progress);
+            result.put("loaded",bytesWritten);
+            result.put("total",totalBytes);
             customHttpPlugin.sendProgress(result);
         });
         // Create an OkHttpClient instance
@@ -86,7 +98,7 @@ public class CustomHttpHandler extends HttpRequestHandler {
                 .writeTimeout(3000, TimeUnit.SECONDS)    // Custom write timeout
                 .retryOnConnectionFailure(true)
                 .build();
-        JSObject headers = call.getObject("headers", new JSObject());
+        JSObject headers = call.getObject("options", new JSObject());
         // Create a request
         assert headers != null;
         assert urlString != null;
@@ -102,14 +114,17 @@ public class CustomHttpHandler extends HttpRequestHandler {
             @Override
             public void onFailure(Call call1, IOException e) {
                 e.printStackTrace();
-                call.reject(e.getLocalizedMessage());
+                CustomHttpHandler.rejectCallWithData(call, e.getLocalizedMessage());
                 // Handle the error
             }
 
             @Override
             public void onResponse(Call call2, Response response) throws IOException {
                 if (!response.isSuccessful()) {
-                    call.reject(response.body().string());
+                    CustomHttpHandler.rejectCallWithData(call, "error_500_server");
+                }
+                if(response.code() == 500){
+                    CustomHttpHandler.rejectCallWithData(call, "error_500_server");
                 }
                 String responseBody = response.body().string();
                 Log.i("Upload successful: ", responseBody);
@@ -125,9 +140,44 @@ public class CustomHttpHandler extends HttpRequestHandler {
                     }
                     call.resolve(jsObject);
                 } catch (JSONException e) {
-                    call.reject(e.getLocalizedMessage());
+                    CustomHttpHandler.rejectCallWithData(call, e.getLocalizedMessage());
                 }
             }
         });
+    }
+
+    private static void rejectCallWithData(PluginCall call, String message){
+        String urlString = call.getString("url", "");
+        JSObject data = call.getObject("body");
+        String filesJson = data.getString("files");
+        JSONArray filesArray = null;
+        try {
+            filesArray = new JSONArray(filesJson);
+        } catch (JSONException ex) {
+            Log.e("json_error", ex.getLocalizedMessage());
+            call.reject("json_error", ex.getLocalizedMessage());
+        }
+        JSONArray dataArray = new JSONArray();
+        int i = 0;
+        for (Iterator<String> it = data.keys(); it.hasNext(); ) {
+            String key = it.next();
+            if(!Objects.equals(key, "files")) {
+                JSObject obj = new JSObject();
+                String value = data.getString(key);
+                try {
+                    obj.put(key,value);
+                    dataArray.put(i, obj);
+                } catch (JSONException ex) {
+                    Log.e("json_error", ex.getLocalizedMessage());
+                    call.reject("json_error", ex.getLocalizedMessage());
+                }
+                i++;
+            }
+        }
+        JSObject errorData = new JSObject();
+        errorData.put("url", urlString);
+        errorData.put("files", filesArray);
+        errorData.put("params", dataArray   );
+        call.reject(message, errorData);
     }
 }
