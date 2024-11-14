@@ -1,6 +1,6 @@
 # custom-http-plugin
 
-Capacitor http with progress event
+Capacitor http with progress event and okhttp 3
 
 ## Install
 
