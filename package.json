@@ -1,6 +1,6 @@
 {
   "name": "custom-http-plugin",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Capacitor http with progress event",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",
