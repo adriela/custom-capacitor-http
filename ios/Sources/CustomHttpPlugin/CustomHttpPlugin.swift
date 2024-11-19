@@ -10,14 +10,11 @@ public class CustomHttpPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "CustomHttpPlugin"
     public let jsName = "CustomHttp"
     public let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "echo", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "post", returnType: CAPPluginReturnPromise)
     ]
     private let implementation = CustomHttp()
 
-    @objc func echo(_ call: CAPPluginCall) {
-        let value = call.getString("value") ?? ""
-        call.resolve([
-            "value": implementation.echo(value)
-        ])
+    @objc func post(_ call: CAPPluginCall) {
+        implementation.post(call, self)
     }
 }
