@@ -1,5 +1,6 @@
 package custom.http.plugin;
 
+import android.os.Build;
 import android.util.Log;
 
 import com.getcapacitor.JSArray;
@@ -11,7 +12,10 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.Iterator;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
@@ -54,15 +58,19 @@ public class CustomHttpHandler extends HttpRequestHandler {
                 call.reject("json_error", e.getLocalizedMessage());
             }
             String fileName = file.getString("fileName");
-            String base64Data = file.getString("base64Data");
-            if (base64Data != null) {; // Get only the base64 part
-                byte[] fileBytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
+            String path = file.getString("path");
+            File f = new File(path.replace("file://", ""));
+            if (f != null) {
+                try{
+                    byte[] fileBytes = Files.readAllBytes(f.toPath());
+                    // Create a request body for the file
+                    RequestBody fileBody = RequestBody.create(fileBytes, MediaType.parse("application/octet-stream"));
 
-                // Create a request body for the file
-                RequestBody fileBody = RequestBody.create(fileBytes, MediaType.parse("application/octet-stream"));
-
-                // Add the file to the multipart request
-                multipartBuilder.addFormDataPart("file_" + i, fileName, fileBody); // Change file extension as needed
+                    // Add the file to the multipart request
+                    multipartBuilder.addFormDataPart("file_" + i, fileName, fileBody); // Change file extension as needed
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
             }
         }
 
@@ -110,6 +118,7 @@ public class CustomHttpHandler extends HttpRequestHandler {
                 .build();
 
         // Execute the request asynchronously
+        JSONArray finalFilesArray = filesArray;
         client.newCall(request).enqueue(new Callback() {
             @Override
             public void onFailure(Call call1, IOException e) {
@@ -128,6 +137,18 @@ public class CustomHttpHandler extends HttpRequestHandler {
                 }
                 String responseBody = response.body().string();
                 Log.i("Upload successful: ", responseBody);
+                for (int i = 0; i < finalFilesArray.length(); i++) {
+                    JSObject file = null;
+                    try {
+                        file = JSObject.fromJSONObject(finalFilesArray.getJSONObject(i));
+                    } catch (JSONException e) {
+                        call.reject("json_error", e.getLocalizedMessage());
+                    }
+                    String path = file.getString("path");
+                    if(deleteFile(path.replace("file://", ""))){
+                        Log.i("File deleted : ", path);
+                    }
+                }
                 JSObject jsObject  = new JSObject();
                 try {
                     JSONObject jsonObject = new JSONObject(responseBody);
@@ -144,6 +165,16 @@ public class CustomHttpHandler extends HttpRequestHandler {
                 }
             }
         });
+    }
+
+    private static boolean deleteFile(String filePath) {
+        File file = new File(filePath);
+        if (file.exists()) {
+            return file.delete(); // Deletes the file and returns true if successful
+        } else {
+            Log.i("Upload File not found at: : ", filePath);
+            return false;
+        }
     }
 
     private static void rejectCallWithData(PluginCall call, String message){
