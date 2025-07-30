@@ -15,6 +15,7 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.net.URLDecoder;
 import java.nio.file.Files;
 import java.util.Iterator;
 import java.util.Objects;
@@ -59,7 +60,7 @@ public class CustomHttpHandler extends HttpRequestHandler {
             }
             String fileName = file.getString("fileName");
             String path = file.getString("path");
-            File f = new File(path.replace("file://", ""));
+            File f = new File(URLDecoder.decode(path.replace("file://", "")));
             if (f != null) {
                 try{
                     byte[] fileBytes = Files.readAllBytes(f.toPath());
@@ -168,7 +169,7 @@ public class CustomHttpHandler extends HttpRequestHandler {
     }
 
     private static boolean deleteFile(String filePath) {
-        File file = new File(filePath);
+        File file = new File(URLDecoder.decode(filePath));
         if (file.exists()) {
             return file.delete(); // Deletes the file and returns true if successful
         } else {
